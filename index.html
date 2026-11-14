@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#f7f5ff">
+<title>KanaLens · 日语罗马音助手</title>
+<style>
+:root{color-scheme:light;--bg:#f7f5ff;--card:#fff;--ink:#211d31;--muted:#777187;--accent:#6954d9;--line:#e8e3f4;--soft:#f0edff}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Hiragino Sans GB",sans-serif}
+main{max-width:760px;margin:auto;padding:calc(22px + env(safe-area-inset-top)) 16px calc(32px + env(safe-area-inset-bottom))}
+header{padding:12px 4px 20px}.eyebrow{color:var(--accent);font-size:12px;font-weight:800;letter-spacing:.12em;text-transform:uppercase}
+h1{font-size:32px;line-height:1.15;margin:8px 0}header p{color:var(--muted);margin:8px 0 0}
+.card{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:18px;margin:12px 0;box-shadow:0 5px 22px #382a6610}
+h2{font-size:17px;margin:0 0 12px}.hint{font-size:13px;color:var(--muted);line-height:1.5}
+textarea{width:100%;min-height:125px;border:1px solid var(--line);border-radius:14px;padding:14px;font:17px/1.65 -apple-system,sans-serif;resize:vertical;color:var(--ink);background:#fff}
+button,.filelabel{border:0;border-radius:13px;padding:12px 16px;background:var(--accent);color:white;font-size:15px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:8px}
+button.secondary{background:var(--soft);color:var(--accent)}button:disabled{opacity:.5}
+.actions{display:flex;gap:9px;flex-wrap:wrap;margin-top:10px}
+.result{font-size:20px;line-height:1.65;overflow-wrap:anywhere;min-height:44px}
+.original{font-size:19px;line-height:1.7;white-space:pre-wrap;overflow-wrap:anywhere}.kana{font-size:19px;line-height:1.7;white-space:pre-wrap;overflow-wrap:anywhere;color:#5544b8}
+.status{font-size:13px;color:var(--muted);margin-top:9px;min-height:20px}
+.upload{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.upload input{max-width:100%;font-size:14px}
+.note{background:#faf8ff;border-radius:12px;padding:12px;font-size:13px;color:#625b75;line-height:1.55}
+footer{text-align:center;color:var(--muted);font-size:12px;padding:18px}
+@media(min-width:600px){main{padding-top:42px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.grid .card{margin:0}}
+</style>
+</head>
+<body>
+<main>
+<header>
+ <div class="eyebrow">Japanese reading assistant</div>
+ <h1>かなレンズ <span style="color:var(--accent)">KanaLens</span></h1>
+ <p>日语文字识别 · 假名转罗马音 · iPhone / iPad</p>
+</header>
+
+<section class="card">
+ <h2>① 输入或粘贴日语</h2>
+ <textarea id="source" placeholder="在这里输入或粘贴日语，例如：こんにちは、今日はいい天気ですね。"></textarea>
+ <div class="actions">
+  <button id="convert">转换罗马音</button>
+  <button class="secondary" id="clear">清空</button>
+ </div>
+</section>
+
+<section class="card">
+ <h2>② 对照阅读</h2>
+ <div class="hint" style="margin-bottom:7px">日语原文</div>
+ <div id="original" class="original">转换结果会显示在这里。</div>
+ <div style="height:1px;background:var(--line);margin:14px 0"></div>
+ <div class="hint" style="margin-bottom:7px;color:var(--accent);font-weight:700">かな · 假名注音（词典匹配）</div>
+ <div id="kana" class="kana">假名注音会显示在这里。</div>
+ <div style="height:1px;background:var(--line);margin:14px 0"></div>
+ <div class="hint" style="margin-bottom:7px;color:var(--accent);font-weight:700">ROMAJI · 罗马音</div>
+ <div id="romaji" class="result">Romaji will appear here.</div>
+ <div class="actions">
+  <button class="secondary" id="copy">复制罗马音</button>
+  <button class="secondary" id="copyBoth">复制原文 + 罗马音</button>
+ </div>
+</section>
+
+<section class="card">
+ <h2>④ 从截图识别日语（OCR）</h2>
+ <p class="hint">选择相册中的截图。首次使用日语 OCR 时需要联网加载识别模型，处理过程可能较慢。</p>
+ <div class="upload">
+  <input id="image" type="file" accept="image/*">
+  <button id="ocr" disabled>识别截图</button>
+ </div>
+ <div id="ocrStatus" class="status">等待选择图片。</div>
+</section>
+
+<section class="card">
+ <h2>识别说明</h2>
+ <div class="note">
+  当前版本会将平假名、片假名转换为 Hepburn 风格罗马音，并用内置常见词典匹配部分汉字词（例如「今日」→「きょう」）。未匹配的汉字会原样保留，不会擅自猜读音；词典并不完整，复杂句子请核对读音。
+ </div>
+ <p class="hint">隐私提示：OCR 在浏览器中运行；首次加载 Tesseract.js 和日语语言模型需要访问第三方 CDN。不要上传包含敏感信息的截图。</p>
+</section>
+<footer>KanaLens Free · 本地浏览器原型</footer>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const basic = {
+"あ":"a","い":"i","う":"u","え":"e","お":"o",
+"か":"ka","き":"ki","く":"ku","け":"ke","こ":"ko",
+"さ":"sa","し":"shi","す":"su","せ":"se","そ":"so",
+"た":"ta","ち":"chi","つ":"tsu","て":"te","と":"to",
+"な":"na","に":"ni","ぬ":"nu","ね":"ne","の":"no",
+"は":"ha","ひ":"hi","ふ":"fu","へ":"he","ほ":"ho",
+"ま":"ma","み":"mi","む":"mu","め":"me","も":"mo",
+"や":"ya","ゆ":"yu","よ":"yo","ら":"ra","り":"ri","る":"ru","れ":"re","ろ":"ro",
+"わ":"wa","を":"o","ん":"n",
+"が":"ga","ぎ":"gi","ぐ":"gu","げ":"ge","ご":"go",
+"ざ":"za","じ":"ji","ず":"zu","ぜ":"ze","ぞ":"zo",
+"だ":"da","ぢ":"ji","づ":"zu","で":"de","ど":"do",
+"ば":"ba","び":"bi","ぶ":"bu","べ":"be","ぼ":"bo",
+"ぱ":"pa","ぴ":"pi","ぷ":"pu","ぺ":"pe","ぽ":"po",
+"ぁ":"a","ぃ":"i","ぅ":"u","ぇ":"e","ぉ":"o","ゃ":"ya","ゅ":"yu","ょ":"yo","ゎ":"wa","ゔ":"vu"
+};
+const combos = {
+"きゃ":"kya","きゅ":"kyu","きょ":"kyo","しゃ":"sha","しゅ":"shu","しょ":"sho",
+"ちゃ":"cha","ちゅ":"chu","ちょ":"cho","にゃ":"nya","にゅ":"nyu","にょ":"nyo",
+"ひゃ":"hya","ひゅ":"hyu","ひょ":"hyo","みゃ":"mya","みゅ":"myu","みょ":"myo",
+"りゃ":"rya","りゅ":"ryu","りょ":"ryo","ぎゃ":"gya","ぎゅ":"gyu","ぎょ":"gyo",
+"じゃ":"ja","じゅ":"ju","じょ":"jo","びゃ":"bya","びゅ":"byu","びょ":"byo",
+"ぴゃ":"pya","ぴゅ":"pyu","ぴょ":"pyo","てぃ":"ti","でぃ":"di","とぅ":"tu","どぅ":"du",
+"ふぁ":"fa","ふぃ":"fi","ふぇ":"fe","ふぉ":"fo","うぃ":"wi","うぇ":"we","うぉ":"wo"
+};
+// 常见汉字词读音词典。采用最长词优先匹配，避免把「日本語」拆成「日本」+「語」。
+const kanjiReadings = {
+ "日本語":"にほんご", "日本人":"にほんじん", "日本":"にほん", "今日":"きょう", "明日":"あした", "昨日":"きのう",
+ "学校":"がっこう", "学生":"がくせい", "先生":"せんせい", "大学":"だいがく", "会社":"かいしゃ", "会社員":"かいしゃいん",
+ "時間":"じかん", "友達":"ともだち", "名前":"なまえ", "電話":"でんわ", "電車":"でんしゃ", "駅":"えき",
+ "天気":"てんき", "元気":"げんき", "世界":"せかい", "中国":"ちゅうごく", "東京":"とうきょう", "大阪":"おおさか",
+ "私":"わたし", "僕":"ぼく", "彼女":"かのじょ", "彼":"かれ", "家族":"かぞく", "母":"はは", "父":"ちち",
+ "猫":"ねこ", "犬":"いぬ", "水":"みず", "食事":"しょくじ", "料理":"りょうり",
+ "可愛い":"かわいい", "綺麗":"きれい", "大好き":"だいすき", "好き":"すき", "嫌い":"きらい", "楽しい":"たのしい",
+ "嬉しい":"うれしい", "悲しい":"かなしい", "美味しい":"おいしい", "新しい":"あたらしい", "大きい":"おおきい", "小さい":"ちいさい",
+ "ありがとう":"ありがとう", "有難う":"ありがとう", "お願いします":"おねがいします", "有名":"ゆうめい", "勉強":"べんきょう", "日本語":"にほんご"
+};
+const readingKeys = Object.keys(kanjiReadings).sort((a,b)=>b.length-a.length);
+function addKanaReadings(text){
+ const chars=Array.from(text); let out="";
+ for(let i=0;i<chars.length;){
+  let match=null;
+  for(const word of readingKeys){
+   const part=chars.slice(i,i+Array.from(word).length).join("");
+   if(part===word){match=word;break;}
+  }
+  if(match){out+=kanjiReadings[match];i+=Array.from(match).length;}
+  else {out+=chars[i];i++;}
+ }
+ return out;
+}
+const toHira = c => {
+ const n=c.codePointAt(0);
+ return n>=0x30A1 && n<=0x30F6 ? String.fromCodePoint(n-0x60) : c;
+};
+function transliterate(s){
+ const a=Array.from(s); let out="";
+ for(let i=0;i<a.length;){
+  let c=toHira(a[i]);
+  if(c==="っ"){
+   if(i+1<a.length){
+    let pair=toHira(a[i+1])+(i+2<a.length?toHira(a[i+2]):"");
+    let syl=combos[pair]||basic[toHira(a[i+1])]||"";
+    let first=syl[0];
+    out += first && !"aeioun".includes(first) ? first : "っ";
+   } else out+="っ";
+   i++; continue;
+  }
+  if(i+1<a.length){
+   let pair=c+toHira(a[i+1]);
+   if(combos[pair]){out+=combos[pair];i+=2;continue;}
+  }
+  if(c==="ー"){out+="ー";i++;continue;}
+  if(c==="ん"){
+   let next=i+1<a.length?toHira(a[i+1]):"";
+   let nextRomaji=basic[next]||combos[next+(i+2<a.length?toHira(a[i+2]):"")]||"";
+   out += /^(a|i|u|e|o|y)/.test(nextRomaji) ? "n'" : "n";
+   i++;continue;
+  }
+  out += basic[c] || a[i];
+  i++;
+ }
+ return out;
+}
+function render(){
+ const s=$("source").value.trim();
+ $("original").textContent=s||"转换结果会显示在这里。";
+ const kana=s?addKanaReadings(s):"";
+ $("kana").textContent=kana||"假名注音会显示在这里。";
+ $("romaji").textContent=s?transliterate(kana):"Romaji will appear here.";
+}
+$("convert").addEventListener("click",render);
+$("clear").addEventListener("click",()=>{$("source").value="";render();});
+$("copy").addEventListener("click",async()=>{
+ const value=$("romaji").textContent;
+ try{await navigator.clipboard.writeText(value);$("ocrStatus").textContent="罗马音已复制。";}
+ catch(e){$("ocrStatus").textContent="复制失败，请长按罗马音文字手动复制。";}
+});
+$("copyBoth").addEventListener("click",async()=>{
+ const value=$("original").textContent+"\\n"+$("kana").textContent+"\\n"+$("romaji").textContent;
+ try{await navigator.clipboard.writeText(value);$("ocrStatus").textContent="原文和罗马音已复制。";}
+ catch(e){$("ocrStatus").textContent="复制失败，请长按文字手动复制。";}
+});
+let selectedImage=null;
+$("image").addEventListener("change",e=>{
+ selectedImage=e.target.files?.[0]||null;
+ $("ocr").disabled=!selectedImage;
+ $("ocrStatus").textContent=selectedImage?`已选择：${selectedImage.name}`:"等待选择图片。";
+});
+$("ocr").addEventListener("click",async()=>{
+ if(!selectedImage)return;
+ $("ocr").disabled=true;$("ocrStatus").textContent="正在加载日语 OCR 引擎…";
+ try{
+  if(!window.Tesseract){
+   await new Promise((resolve,reject)=>{
+    const script=document.createElement("script");
+    script.src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js";
+    script.onload=resolve;script.onerror=()=>reject(new Error("无法加载 OCR 引擎，请检查网络。"));
+    document.head.appendChild(script);
+   });
+  }
+  $("ocrStatus").textContent="正在识别日语，请稍候…";
+  const worker=await Tesseract.createWorker("jpn",1,{logger:m=>{
+   if(m.status==="recognizing text") $("ocrStatus").textContent=`正在识别：${Math.round((m.progress||0)*100)}%`;
+  }});
+  const {data}=await worker.recognize(selectedImage);
+  await worker.terminate();
+  $("source").value=(data.text||"").trim();
+  render();
+  $("ocrStatus").textContent=$("source").value?"识别完成。请检查识别文字，再转换罗马音。":"没有识别到文字，请尝试更清晰的截图。";
+ }catch(err){$("ocrStatus").textContent="识别失败："+err.message;}
+ finally{$("ocr").disabled=!selectedImage;}
+});
+</script>
+</body>
+</html>
