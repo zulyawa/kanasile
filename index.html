@@ -38,7 +38,7 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:18px}
  <h2>① 输入或粘贴日语</h2>
  <textarea id="source" placeholder="在这里输入或粘贴日语，例如：こんにちは、今日はいい天気ですね。"></textarea>
  <div class="actions">
-  <button id="convert">转换罗马音</button>
+  <button id="convert">智能注音 + 罗马音</button>
   <button class="secondary" id="clear">清空</button>
  </div>
 </section>
@@ -72,11 +72,11 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:18px}
 <section class="card">
  <h2>识别说明</h2>
  <div class="note">
-  当前版本会将平假名、片假名转换为 Hepburn 风格罗马音，并用内置常见词典匹配部分汉字词（例如「今日」→「きょう」）。未匹配的汉字会原样保留，不会擅自猜读音；词典并不完整，复杂句子请核对读音。
+  V4 使用 Kuroshiro + Kuromoji 形态素分析词典处理汉字词、活用和句子上下文；首次智能注音需要联网加载分析器与词典，可能需要等待一会儿。若外部引擎加载失败，会退回内置常见词词典。专有名词、姓名、罕见词及多音词仍请核对读音。
  </div>
  <p class="hint">隐私提示：OCR 在浏览器中运行；首次加载 Tesseract.js 和日语语言模型需要访问第三方 CDN。不要上传包含敏感信息的截图。</p>
 </section>
-<footer>KanaLens Free · 本地浏览器原型</footer>
+<footer>KanaLens V4 · 日语智能注音原型</footer>
 </main>
 
 <script>
@@ -166,14 +166,46 @@ function transliterate(s){
  }
  return out;
 }
-function render(){
+let kuroshiroPromise=null;
+async function getJapaneseEngine(){
+ if(!kuroshiroPromise){
+  kuroshiroPromise=(async()=>{
+   const mod=await import("https://cdn.jsdelivr.net/npm/kuroshiro-browser@0.1.0/+esm");
+   const Kuroshiro=mod.Kuroshiro||mod.default?.Kuroshiro||mod.default;
+   if(!Kuroshiro || typeof Kuroshiro.buildAndInitWithKuromoji!=="function"){
+    throw new Error("日语注音引擎模块格式不兼容");
+   }
+   return await Kuroshiro.buildAndInitWithKuromoji(true);
+  })();
+ }
+ try{return await kuroshiroPromise;}catch(err){kuroshiroPromise=null;throw err;}
+}
+async function render(){
  const s=$("source").value.trim();
  $("original").textContent=s||"转换结果会显示在这里。";
- const kana=s?addKanaReadings(s):"";
- $("kana").textContent=kana||"假名注音会显示在这里。";
- $("romaji").textContent=s?transliterate(kana):"Romaji will appear here.";
+ if(!s){$("kana").textContent="假名注音会显示在这里。";$("romaji").textContent="Romaji will appear here.";return;}
+ const button=$("convert"); button.disabled=true;
+ const status=$("ocrStatus");
+ let kana="";
+ try{
+  if(/[\u3400-\u9fff\uF900-\uFAFF]/u.test(s)){
+   status.textContent="正在加载日语词典并分析汉字读音（首次使用可能较慢）…";
+   const engine=await getJapaneseEngine();
+   kana=await engine.convert(s,{to:"hiragana",mode:"normal"});
+   status.textContent="智能注音完成。请核对人名、地名和多音词。";
+  }else{
+   kana=s;
+   status.textContent="假名识别完成。";
+  }
+ }catch(err){
+  kana=addKanaReadings(s);
+  status.textContent="智能词典暂不可用，已使用内置基础词典。原因："+(err?.message||"加载失败");
+ }
+ $("kana").textContent=kana;
+ $("romaji").textContent=transliterate(kana);
+ button.disabled=false;
 }
-$("convert").addEventListener("click",render);
+$("convert").addEventListener("click",()=>{render().catch(err=>{$("ocrStatus").textContent="转换失败："+err.message;$("convert").disabled=false;});});
 $("clear").addEventListener("click",()=>{$("source").value="";render();});
 $("copy").addEventListener("click",async()=>{
  const value=$("romaji").textContent;
@@ -181,7 +213,7 @@ $("copy").addEventListener("click",async()=>{
  catch(e){$("ocrStatus").textContent="复制失败，请长按罗马音文字手动复制。";}
 });
 $("copyBoth").addEventListener("click",async()=>{
- const value=$("original").textContent+"\\n"+$("kana").textContent+"\\n"+$("romaji").textContent;
+ const value=$("original").textContent+"\n"+$("kana").textContent+"\n"+$("romaji").textContent;
  try{await navigator.clipboard.writeText(value);$("ocrStatus").textContent="原文和罗马音已复制。";}
  catch(e){$("ocrStatus").textContent="复制失败，请长按文字手动复制。";}
 });
@@ -210,8 +242,12 @@ $("ocr").addEventListener("click",async()=>{
   const {data}=await worker.recognize(selectedImage);
   await worker.terminate();
   $("source").value=(data.text||"").trim();
-  render();
-  $("ocrStatus").textContent=$("source").value?"识别完成。请检查识别文字，再转换罗马音。":"没有识别到文字，请尝试更清晰的截图。";
+  if($("source").value){
+   $("ocrStatus").textContent="截图识别完成，正在进行智能注音…";
+   await render();
+  } else {
+   $("ocrStatus").textContent="没有识别到文字，请尝试更清晰的截图。";
+  }
  }catch(err){$("ocrStatus").textContent="识别失败："+err.message;}
  finally{$("ocr").disabled=!selectedImage;}
 });
